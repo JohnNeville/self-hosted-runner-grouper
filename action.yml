@@ -1,4 +1,4 @@
-name: 'self-hosted-runner-grouper'
+name: 'Self Hosted Runner Group Sync Action'
 description: 'Manages org level self-hosted runners by naming scheme'
 author: 'John Neville'
 inputs: 
@@ -29,7 +29,9 @@ inputs:
     description: 'Simulate non-GET API calls rather than actually performing the action'
     default: 'false'
     required: false
-
+branding:
+  icon: refresh-ccw
+  color: green
 runs:
   using: 'node12'
   main: 'dist/index.js'
