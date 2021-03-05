@@ -1,0 +1,30 @@
+name: 'self-hosted-runner-grouper'
+description: 'Manages org level self-hosted runners by naming scheme'
+author: 'John Neville'
+inputs: 
+  org-auth-token:
+    description: 'A Github PAT with org admin permissions'
+    required: true
+  org-name:
+    description: 'The name of the organization that should be grouped'
+    required: true
+  org-repo-type:
+    description: 'The types of repositories to load and add to groups'
+    default: 'all'
+    required: false
+  configuration-path:
+    description: 'The path for the label configurations'
+    default: '.github/action-grouper.yml'
+    required: false
+  should-overwrite:
+    description: 'Whether or not to remove non-matching repos from managed groups'
+    default: true
+    required: false
+  should-create-missing:
+    description: 'Whether or not to add new groups that are missing'
+    default: false
+    required: false
+
+runs:
+  using: 'node12'
+  main: 'dist/index.js'
