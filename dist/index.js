@@ -14670,9 +14670,9 @@ function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             const token = core.getInput("org-auth-token", { required: true });
-            let orgName = core.getInput("org-name", { required: true });
             const configPath = core.getInput("configuration-path", { required: true });
             const repoType = core.getInput("org-repo-type", { required: true });
+            let orgName = core.getInput("org-name", { required: false });
             const shouldOverwriteString = core.getInput("should-overwrite", {
                 required: false
             });
