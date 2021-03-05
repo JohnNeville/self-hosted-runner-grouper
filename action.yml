@@ -18,15 +18,15 @@ inputs:
     required: false
   should-overwrite:
     description: 'Whether or not to remove non-matching repos from managed groups'
-    default: true
+    default: 'true'
     required: false
   should-create-missing:
     description: 'Whether or not to add new groups that are missing'
-    default: true
+    default: 'true'
     required: false
   dry-run:
     description: 'Simulate non-GET API calls rather than actually performing the action'
-    default: false
+    default: 'false'
     required: false
 
 runs:
