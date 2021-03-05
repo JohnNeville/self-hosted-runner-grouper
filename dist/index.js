@@ -14673,9 +14673,28 @@ function run() {
             const orgName = core.getInput("org-name", { required: true });
             const configPath = core.getInput("configuration-path", { required: true });
             const repoType = core.getInput("org-repo-type", { required: true });
-            const shouldOverwrite = core.getInput("should-overwrite", { required: false });
+            const shouldOverwriteString = core.getInput("should-overwrite", { required: false });
+            const shouldOverwrite = shouldOverwriteString == "true";
             const shouldCreateMissingGroups = core.getInput("should-create-missing", { required: false });
+            const isDryRun = core.getInput("dry-run", { required: false }) == "true";
             const client = new github.GitHub(token);
+            // If dry-run is enabled then prevent post requests
+            client.hook.wrap("request", (request, options) => __awaiter(this, void 0, void 0, function* () {
+                if (isDryRun && options.method != 'GET') {
+                    core.info("Dry Run Enabled: Preventing non-get requests. The request would have been:");
+                    core.info(`${options.method} ${options.url}: ${JSON.stringify(options)}`);
+                    return {
+                        data: undefined,
+                        /** Response status number */
+                        status: 400,
+                        /** Response headers */
+                        headers: {}
+                    };
+                }
+                else {
+                    return request(options);
+                }
+            }));
             // Load up all runners for the github org
             const listForOrgOptions = client.repos.listForOrg.endpoint.merge({
                 org: orgName,

@@ -24,6 +24,10 @@ inputs:
     description: 'Whether or not to add new groups that are missing'
     default: false
     required: false
+  dry-run:
+    description: 'Simulate API calls rather than actually performing the action'
+    default: false
+    required: false
 
 runs:
   using: 'node12'
