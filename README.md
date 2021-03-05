@@ -15,17 +15,70 @@ The key is the name of the [self hosted runner group](https://docs.github.com/en
 
 #### Match Object
 
-TODO
+For more control over matching, you can provide a match object instead of a simple path glob. The match object is defined as:
+
+```yml
+- any: 
+    patterns: ['list', 'of', 'globs']
+    options: 
+      nocase: true
+      etc...
+  all: 
+    patterns: ['list', 'of', 'globs']
+    options: 
+      nocase: true
+      etc...
+```
+
+For a more simple syntax you can also define it as an array of patterns (with the default options)
+
+```yml
+- any: ['list', 'of', 'globs']
+  all: ['list', 'of', 'globs']
+```
+
+One or both fields can be provided for fine-grained matching.
+
+The fields are defined as follows:
+* `any`: match AT LEAST ONE globs against repo name
+* `all`: match ALL globs against repo name
+* `options`: Allows you to set the options as defined by the [minimatch library](https://github.com/isaacs/minimatch/tree/master#options)
+
+A simple path glob is the equivalent to `any: ['glob']`. More specifically, the following two configurations are equivalent:
+```yml
+group1:
+- example1/*
+```
+and
+```yml
+group1:
+- any: ['example1/*']
+```
+
+From a boolean logic perspective, top-level match objects are `OR`-ed together and indvidual match rules within an object are `AND`-ed. Combined with `!` negation, you can write complex matching rules.
 
 #### Basic Examples
 
 ```yml
-# Add 'doc-builder' self-hosted runner group with every repo beginning with dotnet/docs.
+# Manage the group 'doc-builder' self-hosted runner group with every repo beginning with 'docs'.
 doc-builder:
-  - dotnet/docs*
+  - docs*
 
-# Add 'group2' self-hosted runner group with every repo beginning with dotnet/docs.
-group2: dotnet/docs*
+# Manage the group 'test-any' self-hosted runner group with every repo beginning with any of the defined patterns.
+test-any: 
+  - any: ['test','test*','Any*']
+
+# Manage the group 'test-all' self-hosted runner group with repos that match all patterns
+test-all: 
+  - all:
+      patterns: ['Test*', '*Different*']
+
+# Manage the group 'test-case-insensitive' self-hosted runner group with repos that match all patterns
+test-case-insensitive: 
+  - any:
+      patterns: ['test2']
+      options:
+        nocase: true
 ```
 
 #### Common Examples
@@ -36,7 +89,7 @@ TODO
 
 Create a workflow (eg: `.github/workflows/self-hosted-runner-grouper.yml` see [Creating a Workflow file](https://help.github.com/en/articles/configuring-a-workflow#creating-a-workflow-file)) to utilize the grouper action with content:
 
-```
+```yml
 name: "Sync Self-Hosted Runner Groups"
 on:
   schedule:
