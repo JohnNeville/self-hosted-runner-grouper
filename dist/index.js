@@ -14707,15 +14707,18 @@ function run() {
                 }
             }));
             // Load up all runners for the github org
+            core.debug(`Loading Repos for Org`);
             const listForOrgOptions = client.repos.listForOrg.endpoint.merge({
                 org: orgName,
                 type: repoType
             });
             const repositories = (yield client.paginate(listForOrgOptions));
             // Get the existing runner groups
+            core.debug(`Getting existing runner groups`);
             const existingRunnerGroups = yield getExistingRunnerGroups(client, orgName);
             const groupGlobs = yield getGroupGlobs(client, configPath);
             // Validate managed runner groups
+            core.debug(`Validating groups`);
             const groupsThatAreValid = new Map();
             const groupsToAdd = new Map();
             const invalidGroups = [];
@@ -14733,17 +14736,20 @@ function run() {
                 }
             }
             // Sync existing managed runner groups with repos
+            core.debug(`Syncing groups`);
             for (const [existingGroup, globs] of groupsThatAreValid.entries()) {
                 core.debug(`syncing ${existingGroup.name}`);
                 yield syncExistingGroupToRepo(client, orgName, existingGroup.id, repositories, globs, shouldOverwrite);
             }
             // Create missing managed runner groups with matching repos
+            core.debug(`Adding missing groups`);
             if (shouldCreateMissingGroups) {
                 for (const [group, globs] of groupsToAdd.entries()) {
                     core.debug(`creating ${group}`);
                     yield addMissingGroupToRepo(client, orgName, group, repositories, globs);
                 }
             }
+            core.info("Sync is complete");
         }
         catch (error) {
             core.error(error);

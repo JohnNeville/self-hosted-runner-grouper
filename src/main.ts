@@ -91,7 +91,10 @@ async function run() {
 
     // Validate managed runner groups
     core.debug(`Validating groups`);
-    const groupsThatAreValid: Map<RunnerGroup,StringOrMatchConfig[]> = new Map();
+    const groupsThatAreValid: Map<
+      RunnerGroup,
+      StringOrMatchConfig[]
+    > = new Map();
     const groupsToAdd: Map<string, StringOrMatchConfig[]> = new Map();
     const invalidGroups: string[] = [];
     for (const [group, globs] of groupGlobs.entries()) {
@@ -136,7 +139,7 @@ async function run() {
         );
       }
     }
-    core.info("Sync is complete")
+    core.info("Sync is complete");
   } catch (error) {
     core.error(error);
     core.setFailed(error.message);
