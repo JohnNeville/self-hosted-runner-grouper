@@ -13,8 +13,8 @@ inputs:
     default: 'all'
     required: false
   configuration-path:
-    description: 'The path for the label configurations'
-    default: '.github/action-grouper.yml'
+    description: 'The path for the group configurations'
+    default: '.github/self-hosted-runner-grouper.yml'
     required: false
   should-overwrite:
     description: 'Whether or not to remove non-matching repos from managed groups'

@@ -1,14 +1,17 @@
-# Org Self Hosted Runners Grouper
+# Self Hosted Runners Grouper
 
-Org Self Hosted Runners grouper triages PRs based on the paths that are modified in the PR.
+Self Hosted Runners Grouper will process a list of rules against the org's repos and create or update self-hosted runner groups.
+
+This project began as a way of managing self-hosted runner groups automatically and the pattern matching was inspired by the [actions/labeler](https://github.com/actions/labeler/) project.
+Using minimatch for this is probably overkill but it allows for more complex rules without needing to deal with Regex.
 
 ## Usage
 
-### Create `.github/action-grouper.yml`
+### Create `.github/self-hosted-runner-grouper.yml`
 
-Create a `.github/action-grouper.yml` file with a list of groups and [minimatch](https://github.com/isaacs/minimatch) globs to match to apply the group.
+Create a `.github/self-hosted-runner-grouper.yml` file with a list of groups and [minimatch](https://github.com/isaacs/minimatch) globs to match to apply the group.
 
-The key is the name of the group in your repository that you want to add (eg: "merge conflict", "needs-updating") and the value is the path (glob) of the changed files (eg: `src/**/*`, `tests/*.spec.js`) or a match object.
+The key is the name of the [self hosted runner group](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups) that you want to manage (eg: "octo-runner-group", "octo-node-group") and the value is the glob string to match against a repo name (eg: `*.ts`, `dotnet/docs*`) or a match object.
 
 #### Match Object
 
@@ -41,57 +44,23 @@ From a boolean logic perspective, top-level match objects are `OR`-ed together a
 #### Basic Examples
 
 ```yml
-# Add 'group1' to any changes within 'example' folder or any subfolders
-group1:
-  - example/**/*
+# Add 'doc-builder' self-hosted runner group with every repo beginning with dotnet/docs.
+doc-builder:
+  - dotnet/docs*
 
-# Add 'group2' to any file changes within 'example2' folder
-group2: example2/*
+# Add 'group2' self-hosted runner group with every repo beginning with dotnet/docs.
+group2: dotnet/docs*
 ```
 
 #### Common Examples
 
-```yml
-# Add 'repo' group to any root file changes
-repo:
-  - ./*
-  
-# Add '@domain/core' group to any change within the 'core' package
-@domain/core:
-  - package/core/*
-  - package/core/**/*
-
-# Add 'test' group to any change to *.spec.js files within the source dir
-test:
-  - src/**/*.spec.js
-
-# Add 'source' group to any change to src files within the source dir EXCEPT for the docs sub-folder
-source:
-- any: ['src/**/*', '!src/docs/*']
-
-# Add 'frontend` group to any change to *.js files as long as the `main.js` hasn't changed
-frontend:
-- any: ['src/**/*.js']
-  all: ['!src/main.js']
-```
+TODO
 
 ### Create Workflow
 
-Create a workflow (eg: `.github/workflows/action-grouper.yml` see [Creating a Workflow file](https://help.github.com/en/articles/configuring-a-workflow#creating-a-workflow-file)) to utilize the grouper action with content:
+Create a workflow (eg: `.github/workflows/self-hosted-runner-grouper.yml` see [Creating a Workflow file](https://help.github.com/en/articles/configuring-a-workflow#creating-a-workflow-file)) to utilize the grouper action with content:
 
-```
-name: "Org Self Hosted Runners Grouper"
-on:
-- pull_request_target
-
-jobs:
-  triage:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/grouper@main
-      with:
-        repo-token: "${{ secrets.GITHUB_TOKEN }}"
-```
+TODO
 
 _Note: This grants access to the `GITHUB_TOKEN` so the action can make calls to GitHub's rest API_
 
@@ -101,6 +70,10 @@ Various inputs are defined in [`action.yml`](action.yml) to let you configure th
 
 | Name | Description | Default |
 | - | - | - |
-| `repo-token` | Token to use to authorize group changes. Typically the GITHUB_TOKEN secret | N/A |
-| `configuration-path` | The path to the group configuration file | `.github/action-grouper.yml` |
-| `sync-groups` | Whether or not to remove groups when matching files are reverted or no longer changed by the PR | `false`
+| `org-auth-token` | A Github PAT with org admin permissions. This MUST NOT be the GITHUB_TOKEN secret and must have the `admin:org` scope. | N/A |
+| `org-name` | The name of the organization that should be grouped | N/A |
+| `org-repo-type` | The types of repositories to load and add to groups | N/A |
+| `configuration-path` | The path to the group configuration file | `.github/self-hosted-runner-grouper.yml` |
+| `should-overwrite` | Whether or not to remove non-matching repos from managed groups | true |
+| `should-create-missing` | Whether or not to add new groups that are missing | true |
+| `dry-run` | Simulate non-GET API calls rather than actually performing the action | false |
