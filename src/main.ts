@@ -1,10 +1,17 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { Octokit } from "@octokit/rest";
-import { GetResponseDataTypeFromEndpointMethod} from "@octokit/types";
+import { GetResponseDataTypeFromEndpointMethod } from "@octokit/types";
 import * as yaml from "js-yaml";
 import { IMinimatch, Minimatch } from "minimatch";
-import { ListReposWithAccessToSelfHostedRunnerGroupInOrgResponse, ListSelfHostedRunnersGroupResponse, RepoTypes, RunnerGroup, StringOrMatchConfig, MatchConfig } from "./types";
+import {
+  ListReposWithAccessToSelfHostedRunnerGroupInOrgResponse,
+  ListSelfHostedRunnersGroupResponse,
+  RepoTypes,
+  RunnerGroup,
+  StringOrMatchConfig,
+  MatchConfig
+} from "./types";
 
 async function run() {
   try {
@@ -12,18 +19,26 @@ async function run() {
     const orgName = core.getInput("org-name", { required: true });
     const configPath = core.getInput("configuration-path", { required: true });
     const repoType = core.getInput("org-repo-type", { required: true });
-    const shouldOverwriteString = core.getInput("should-overwrite", { required: false })
+    const shouldOverwriteString = core.getInput("should-overwrite", {
+      required: false
+    });
     const shouldOverwrite = shouldOverwriteString == "true";
-    const shouldCreateMissingGroups = core.getInput("should-create-missing", { required: false });
+    const shouldCreateMissingGroups = core.getInput("should-create-missing", {
+      required: false
+    });
     const isDryRun = core.getInput("dry-run", { required: false }) == "true";
 
     const client = new github.GitHub(token);
 
     // If dry-run is enabled then prevent post requests
     client.hook.wrap("request", async (request, options) => {
-      if(isDryRun && options.method != 'GET'){
-        core.info("Dry Run Enabled: Preventing non-get requests. The request would have been:")
-        core.info(`${options.method} ${options.url}: ${JSON.stringify(options)}`);
+      if (isDryRun && options.method != "GET") {
+        core.info(
+          "Dry Run Enabled: Preventing non-get requests. The request would have been:"
+        );
+        core.info(
+          `${options.method} ${options.url}: ${JSON.stringify(options)}`
+        );
         return {
           data: undefined,
           /** Response status number */
@@ -31,8 +46,8 @@ async function run() {
 
           /** Response headers */
           headers: {}
-        } as Octokit.Response<any>
-      }else{
+        } as Octokit.Response<any>;
+      } else {
         return request(options);
       }
     });
@@ -42,15 +57,16 @@ async function run() {
       org: orgName,
       type: repoType as RepoTypes
     });
-  
-    type listRepoResponseType = GetResponseDataTypeFromEndpointMethod<typeof client.repos.listForOrg>;
-    const repositories = (await client.paginate(listForOrgOptions)) as listRepoResponseType;
+
+    type listRepoResponseType = GetResponseDataTypeFromEndpointMethod<
+      typeof client.repos.listForOrg
+    >;
+    const repositories = (await client.paginate(
+      listForOrgOptions
+    )) as listRepoResponseType;
 
     // Get the existing runner groups
-    const existingRunnerGroups = await getExistingRunnerGroups(
-      client,
-      orgName
-    )
+    const existingRunnerGroups = await getExistingRunnerGroups(client, orgName);
 
     const groupGlobs: Map<string, StringOrMatchConfig[]> = await getGroupGlobs(
       client,
@@ -58,19 +74,22 @@ async function run() {
     );
 
     // Validate managed runner groups
-    const groupsThatAreValid: Map<RunnerGroup, StringOrMatchConfig[]> = new Map();
-    const groupsToAdd:  Map<string, StringOrMatchConfig[]> = new Map();
+    const groupsThatAreValid: Map<
+      RunnerGroup,
+      StringOrMatchConfig[]
+    > = new Map();
+    const groupsToAdd: Map<string, StringOrMatchConfig[]> = new Map();
     const invalidGroups: string[] = [];
     for (const [group, globs] of groupGlobs.entries()) {
       core.debug(`validating ${group}`);
-      const matchingExistingGroup = existingRunnerGroups.filter(g => g.name == group)[0]
-      if(!matchingExistingGroup){
+      const matchingExistingGroup = existingRunnerGroups.filter(
+        g => g.name == group
+      )[0];
+      if (!matchingExistingGroup) {
         groupsToAdd.set(group, globs);
-      }
-      else if(isSupportedRunnerGroup(matchingExistingGroup)){
+      } else if (isSupportedRunnerGroup(matchingExistingGroup)) {
         groupsThatAreValid.set(matchingExistingGroup, globs);
-      }
-      else{
+      } else {
         invalidGroups.push(group);
       }
     }
@@ -78,14 +97,27 @@ async function run() {
     // Sync existing managed runner groups with repos
     for (const [existingGroup, globs] of groupsThatAreValid.entries()) {
       core.debug(`syncing ${existingGroup.name}`);
-      await syncExistingGroupToRepo(client, orgName, existingGroup.id, repositories, globs, shouldOverwrite)
+      await syncExistingGroupToRepo(
+        client,
+        orgName,
+        existingGroup.id,
+        repositories,
+        globs,
+        shouldOverwrite
+      );
     }
 
     // Create missing managed runner groups with matching repos
-    if(shouldCreateMissingGroups){
+    if (shouldCreateMissingGroups) {
       for (const [group, globs] of groupsToAdd.entries()) {
         core.debug(`creating ${group}`);
-        await addMissingGroupToRepo(client, orgName, group, repositories, globs)
+        await addMissingGroupToRepo(
+          client,
+          orgName,
+          group,
+          repositories,
+          globs
+        );
       }
     }
   } catch (error) {
@@ -94,10 +126,12 @@ async function run() {
   }
 }
 
-function isSupportedRunnerGroup(group : RunnerGroup): boolean {
+function isSupportedRunnerGroup(group: RunnerGroup): boolean {
   core.debug(`    checking to see if ${group.name} is supported`);
-  if(group.visibility != "selected"){
-    core.warning(`the group(${group.name}) must be marked as "selected" visibility for it to be supported`);
+  if (group.visibility != "selected") {
+    core.warning(
+      `the group(${group.name}) must be marked as "selected" visibility for it to be supported`
+    );
   }
   core.debug(`    group is supported`);
   return true;
@@ -166,10 +200,7 @@ function toMatchConfig(config: StringOrMatchConfig): MatchConfig {
   return config;
 }
 
-function checkGlobs(
-  repoName: string,
-  globs: StringOrMatchConfig[]
-): boolean {
+function checkGlobs(repoName: string, globs: StringOrMatchConfig[]): boolean {
   for (const glob of globs) {
     core.debug(` checking pattern ${JSON.stringify(glob)}`);
     const matchConfig = toMatchConfig(glob);
@@ -196,7 +227,6 @@ function checkMatch(repoName: string, matchConfig: MatchConfig): boolean {
   return true;
 }
 
-
 // equivalent to "Array.some()" but expanded for debugging and clarity
 function checkAny(repoName: string, globs: string[]): boolean {
   const matchers = globs.map(g => new Minimatch(g));
@@ -222,7 +252,7 @@ function checkAll(repoName: string, globs: string[]): boolean {
   return true;
 }
 
-function isMatch(repoName: string, matchers: IMinimatch[]): boolean{
+function isMatch(repoName: string, matchers: IMinimatch[]): boolean {
   core.debug(`    matching patterns against repoName ${repoName}`);
   for (const matcher of matchers) {
     core.debug(`   - ${printPattern(matcher)}`);
@@ -237,80 +267,95 @@ function isMatch(repoName: string, matchers: IMinimatch[]): boolean{
 }
 
 function getMatchingReposIds(
-  repositories: Octokit.ReposListForOrgResponse, 
+  repositories: Octokit.ReposListForOrgResponse,
   globs: StringOrMatchConfig[]
-) : number[] {
-  const repositoryIds: number[] = []
-  for(const [n,repo] of repositories.entries()){
-    if(checkGlobs(repo.name, globs)){
-      repositoryIds.push(repo.id)
+): number[] {
+  const repositoryIds: number[] = [];
+  for (const [n, repo] of repositories.entries()) {
+    if (checkGlobs(repo.name, globs)) {
+      repositoryIds.push(repo.id);
     }
   }
-  return repositoryIds
+  return repositoryIds;
 }
 
 async function getExistingRunnerGroups(
   client: github.GitHub,
   orgName: string
 ): Promise<Array<RunnerGroup>> {
-  const apiResponse = await client.request('GET /orgs/{org}/actions/runner-groups', {
-    org: orgName
-  })
-  const orgRunnerGroupsResponse = apiResponse.data as ListSelfHostedRunnersGroupResponse
-  return orgRunnerGroupsResponse.runner_groups
+  const apiResponse = await client.request(
+    "GET /orgs/{org}/actions/runner-groups",
+    {
+      org: orgName
+    }
+  );
+  const orgRunnerGroupsResponse = apiResponse.data as ListSelfHostedRunnersGroupResponse;
+  return orgRunnerGroupsResponse.runner_groups;
 }
 
 async function syncExistingGroupToRepo(
   client: github.GitHub,
   orgName: string,
   runnerGroupId: number,
-  repositories: Octokit.ReposListForOrgResponse, 
+  repositories: Octokit.ReposListForOrgResponse,
   globs: StringOrMatchConfig[],
-  shouldOverwrite : boolean
-){
-  const repositoryIds: number[] = []
-  if(!shouldOverwrite){
-    const existingRepos = await getSelectedReposForRunnerGroups(client, orgName, runnerGroupId)
-    if(existingRepos.repositories){
-      for(const [i,repo] of existingRepos.repositories?.entries() ){
-        repositoryIds.push(repo.id)
+  shouldOverwrite: boolean
+) {
+  const repositoryIds: number[] = [];
+  if (!shouldOverwrite) {
+    const existingRepos = await getSelectedReposForRunnerGroups(
+      client,
+      orgName,
+      runnerGroupId
+    );
+    if (existingRepos.repositories) {
+      for (const [i, repo] of existingRepos.repositories?.entries()) {
+        repositoryIds.push(repo.id);
       }
     }
   }
 
-  const matchingRepoIds = getMatchingReposIds(repositories, globs)
-  const allRepositoryIds = repositoryIds.concat(matchingRepoIds)
+  const matchingRepoIds = getMatchingReposIds(repositories, globs);
+  const allRepositoryIds = repositoryIds.concat(matchingRepoIds);
 
-  setSelectedReposForRunnerGroups(client, orgName, runnerGroupId, allRepositoryIds)
+  setSelectedReposForRunnerGroups(
+    client,
+    orgName,
+    runnerGroupId,
+    allRepositoryIds
+  );
 }
 
 async function addMissingGroupToRepo(
   client: github.GitHub,
   orgName: string,
   groupName: string,
-  repositories: Octokit.ReposListForOrgResponse, 
+  repositories: Octokit.ReposListForOrgResponse,
   globs: StringOrMatchConfig[]
-){
-  const matchingRepoIds = getMatchingReposIds(repositories, globs)
+) {
+  const matchingRepoIds = getMatchingReposIds(repositories, globs);
 
-  await client.request('POST /orgs/{org}/actions/runner-groups', {
+  await client.request("POST /orgs/{org}/actions/runner-groups", {
     org: orgName,
     name: groupName,
     selected_repository_ids: matchingRepoIds,
     visibility: "selected"
-  })
+  });
 }
 
 async function getSelectedReposForRunnerGroups(
   client: github.GitHub,
   orgName: string,
-  runnerGroupId: number,
+  runnerGroupId: number
 ): Promise<ListReposWithAccessToSelfHostedRunnerGroupInOrgResponse> {
-  const apiResponse = await client.request('GET /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories', {
-    org: orgName,
-    runner_group_id: runnerGroupId
-  })
-  return (apiResponse.data as ListReposWithAccessToSelfHostedRunnerGroupInOrgResponse)
+  const apiResponse = await client.request(
+    "GET /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories",
+    {
+      org: orgName,
+      runner_group_id: runnerGroupId
+    }
+  );
+  return apiResponse.data as ListReposWithAccessToSelfHostedRunnerGroupInOrgResponse;
 }
 
 async function setSelectedReposForRunnerGroups(
@@ -319,11 +364,14 @@ async function setSelectedReposForRunnerGroups(
   runnerGroupId: number,
   repositoryIds: number[]
 ) {
-  await client.request('PUT /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories', {
-    org: orgName,
-    runner_group_id: runnerGroupId,
-    selected_repository_ids: repositoryIds
-  })
+  await client.request(
+    "PUT /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories",
+    {
+      org: orgName,
+      runner_group_id: runnerGroupId,
+      selected_repository_ids: repositoryIds
+    }
+  );
 }
 
 run();
