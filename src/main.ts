@@ -67,6 +67,7 @@ async function run() {
     });
 
     // Load up all runners for the github org
+    core.debug(`Loading Repos for Org`);
     const listForOrgOptions = client.repos.listForOrg.endpoint.merge({
       org: orgName,
       type: repoType as RepoTypes
@@ -80,6 +81,7 @@ async function run() {
     )) as listRepoResponseType;
 
     // Get the existing runner groups
+    core.debug(`Getting existing runner groups`);
     const existingRunnerGroups = await getExistingRunnerGroups(client, orgName);
 
     const groupGlobs: Map<string, StringOrMatchConfig[]> = await getGroupGlobs(
@@ -88,10 +90,8 @@ async function run() {
     );
 
     // Validate managed runner groups
-    const groupsThatAreValid: Map<
-      RunnerGroup,
-      StringOrMatchConfig[]
-    > = new Map();
+    core.debug(`Validating groups`);
+    const groupsThatAreValid: Map<RunnerGroup,StringOrMatchConfig[]> = new Map();
     const groupsToAdd: Map<string, StringOrMatchConfig[]> = new Map();
     const invalidGroups: string[] = [];
     for (const [group, globs] of groupGlobs.entries()) {
@@ -109,6 +109,7 @@ async function run() {
     }
 
     // Sync existing managed runner groups with repos
+    core.debug(`Syncing groups`);
     for (const [existingGroup, globs] of groupsThatAreValid.entries()) {
       core.debug(`syncing ${existingGroup.name}`);
       await syncExistingGroupToRepo(
@@ -122,6 +123,7 @@ async function run() {
     }
 
     // Create missing managed runner groups with matching repos
+    core.debug(`Adding missing groups`);
     if (shouldCreateMissingGroups) {
       for (const [group, globs] of groupsToAdd.entries()) {
         core.debug(`creating ${group}`);
@@ -134,6 +136,7 @@ async function run() {
         );
       }
     }
+    core.info("Sync is complete")
   } catch (error) {
     core.error(error);
     core.setFailed(error.message);
