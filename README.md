@@ -72,7 +72,7 @@ jobs:
     steps:
     - uses: JohnNeville/self-hosted-runner-grouper@main
       with:
-        repo-token: "${{ secrets.ORG_ADMIN_MACHINE_USER_PAT }}"
+        org-auth-token: "${{ secrets.ORG_ADMIN_MACHINE_USER_PAT }}"
 ```
 
 _Note: This requires adding the github secret `ORG_ADMIN_MACHINE_USER_PAT` with an org admin Personal Access Token so the action can make calls to GitHub's rest API. As such, keeping this repo well protected is highly recommended_
@@ -84,8 +84,8 @@ Various inputs are defined in [`action.yml`](action.yml) to let you configure th
 | Name | Description | Default |
 | - | - | - |
 | `org-auth-token` | A Github PAT with org admin permissions. This MUST NOT be the GITHUB_TOKEN secret and must have the `admin:org` scope. | N/A |
-| `org-name` | The name of the organization that should be grouped | N/A |
-| `org-repo-type` | The types of repositories to load and add to groups | N/A |
+| `org-name` | The name of the organization that should be grouped. Defaults to the org running this action | `github.context.repo.owner` |
+| `org-repo-type` | The types of repositories to load and add to groups. Can be `all`,`public`,`private`,`forks`,`sources`,`member`,`internal` | `all` |
 | `configuration-path` | The path to the group configuration file | `.github/self-hosted-runner-grouper.yml` |
 | `should-overwrite` | Whether or not to remove non-matching repos from managed groups | true |
 | `should-create-missing` | Whether or not to add new groups that are missing | true |

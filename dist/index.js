@@ -14670,17 +14670,24 @@ function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             const token = core.getInput("org-auth-token", { required: true });
-            const orgName = core.getInput("org-name", { required: true });
+            let orgName = core.getInput("org-name", { required: true });
             const configPath = core.getInput("configuration-path", { required: true });
             const repoType = core.getInput("org-repo-type", { required: true });
-            const shouldOverwriteString = core.getInput("should-overwrite", { required: false });
+            const shouldOverwriteString = core.getInput("should-overwrite", {
+                required: false
+            });
             const shouldOverwrite = shouldOverwriteString == "true";
-            const shouldCreateMissingGroups = core.getInput("should-create-missing", { required: false });
+            const shouldCreateMissingGroups = core.getInput("should-create-missing", {
+                required: false
+            });
             const isDryRun = core.getInput("dry-run", { required: false }) == "true";
             const client = new github.GitHub(token);
+            if (!(orgName && orgName.trim())) {
+                orgName = github.context.repo.owner;
+            }
             // If dry-run is enabled then prevent post requests
             client.hook.wrap("request", (request, options) => __awaiter(this, void 0, void 0, function* () {
-                if (isDryRun && options.method != 'GET') {
+                if (isDryRun && options.method != "GET") {
                     core.info("Dry Run Enabled: Preventing non-get requests. The request would have been:");
                     core.info(`${options.method} ${options.url}: ${JSON.stringify(options)}`);
                     return {
@@ -14862,7 +14869,7 @@ function getMatchingReposIds(repositories, globs) {
 }
 function getExistingRunnerGroups(client, orgName) {
     return __awaiter(this, void 0, void 0, function* () {
-        const apiResponse = yield client.request('GET /orgs/{org}/actions/runner-groups', {
+        const apiResponse = yield client.request("GET /orgs/{org}/actions/runner-groups", {
             org: orgName
         });
         const orgRunnerGroupsResponse = apiResponse.data;
@@ -14889,7 +14896,7 @@ function syncExistingGroupToRepo(client, orgName, runnerGroupId, repositories, g
 function addMissingGroupToRepo(client, orgName, groupName, repositories, globs) {
     return __awaiter(this, void 0, void 0, function* () {
         const matchingRepoIds = getMatchingReposIds(repositories, globs);
-        yield client.request('POST /orgs/{org}/actions/runner-groups', {
+        yield client.request("POST /orgs/{org}/actions/runner-groups", {
             org: orgName,
             name: groupName,
             selected_repository_ids: matchingRepoIds,
@@ -14899,7 +14906,7 @@ function addMissingGroupToRepo(client, orgName, groupName, repositories, globs) 
 }
 function getSelectedReposForRunnerGroups(client, orgName, runnerGroupId) {
     return __awaiter(this, void 0, void 0, function* () {
-        const apiResponse = yield client.request('GET /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories', {
+        const apiResponse = yield client.request("GET /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories", {
             org: orgName,
             runner_group_id: runnerGroupId
         });
@@ -14908,7 +14915,7 @@ function getSelectedReposForRunnerGroups(client, orgName, runnerGroupId) {
 }
 function setSelectedReposForRunnerGroups(client, orgName, runnerGroupId, repositoryIds) {
     return __awaiter(this, void 0, void 0, function* () {
-        yield client.request('PUT /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories', {
+        yield client.request("PUT /orgs/{org}/actions/runner-groups/{runner_group_id}/repositories", {
             org: orgName,
             runner_group_id: runnerGroupId,
             selected_repository_ids: repositoryIds

@@ -16,7 +16,7 @@ import {
 async function run() {
   try {
     const token = core.getInput("org-auth-token", { required: true });
-    const orgName = core.getInput("org-name", { required: true });
+    let orgName = core.getInput("org-name", { required: true });
     const configPath = core.getInput("configuration-path", { required: true });
     const repoType = core.getInput("org-repo-type", { required: true });
     const shouldOverwriteString = core.getInput("should-overwrite", {
@@ -29,6 +29,10 @@ async function run() {
     const isDryRun = core.getInput("dry-run", { required: false }) == "true";
 
     const client = new github.GitHub(token);
+
+    if (!(orgName && orgName.trim())) {
+      orgName = github.context.repo.owner;
+    }
 
     // If dry-run is enabled then prevent post requests
     client.hook.wrap("request", async (request, options) => {
