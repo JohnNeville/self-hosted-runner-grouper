@@ -14806,7 +14806,7 @@ function printPattern(matcher) {
 function toMatchConfig(config) {
     if (typeof config === "string") {
         return {
-            any: [config]
+            any: { patterns: [config] }
         };
     }
     return config;
@@ -14823,35 +14823,59 @@ function checkGlobs(repoName, globs) {
 }
 function checkMatch(repoName, matchConfig) {
     if (matchConfig.all !== undefined) {
-        if (!checkAll(repoName, matchConfig.all, matchConfig.options)) {
+        const matchers = toMatchers(matchConfig.all);
+        if (!checkAll(repoName, matchers)) {
             return false;
         }
     }
     if (matchConfig.any !== undefined) {
-        if (!checkAny(repoName, matchConfig.any, matchConfig.options)) {
+        const matchers = toMatchers(matchConfig.any);
+        if (!checkAny(repoName, matchers)) {
             return false;
         }
     }
     return true;
 }
+function isArrayOfStrings(value) {
+    return Array.isArray(value) && value.every(item => typeof item === "string");
+}
+function toMatchers(matchConditions) {
+    let matchPatterns;
+    let options = undefined;
+    if (isArrayOfStrings(matchConditions)) {
+        matchPatterns = matchConditions;
+    }
+    else {
+        const config = matchConditions;
+        matchPatterns = config.patterns;
+        options = config.options;
+    }
+    return matchPatterns === null || matchPatterns === void 0 ? void 0 : matchPatterns.map(g => new minimatch_1.Minimatch(g, options));
+}
 // equivalent to "Array.some()" but expanded for debugging and clarity
-function checkAny(repoName, globs, matchOptions) {
-    const matchers = globs.map(g => new minimatch_1.Minimatch(g, matchOptions));
+function checkAny(repoName, matchers) {
     core.debug(`  checking "any" patterns against repo ${repoName}`);
+    if (!matchers) {
+        core.debug(`   no patterns defined`);
+        return false;
+    }
     for (const matcher of matchers) {
         core.debug(`   - ${printPattern(matcher)}`);
         if (matcher.match(repoName)) {
             core.debug(`   ${printPattern(matcher)} matched`);
-            return false;
+            return true;
         }
     }
     core.debug(`  "any" patterns did not match repo name`);
     return false;
 }
 // equivalent to "Array.every()" but expanded for debugging and clarity
-function checkAll(repoName, globs, matchOptions) {
-    const matchers = globs.map(g => new minimatch_1.Minimatch(g, matchOptions));
+function checkAll(repoName, matchers) {
     core.debug(` checking "all" patterns against repo ${repoName}`);
+    if (!matchers) {
+        core.debug(`   no patterns defined`);
+        return false;
+    }
     for (const matcher of matchers) {
         core.debug(`   - ${printPattern(matcher)}`);
         if (!matcher.match(repoName)) {

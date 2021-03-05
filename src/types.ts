@@ -1,8 +1,12 @@
 
 import { IOptions } from "minimatch";
 export interface MatchConfig {
-  all?: string[];
-  any?: string[];
+  all?: MatchConditions | string[];
+  any?: MatchConditions | string[];
+}
+
+export interface MatchConditions {
+  patterns?: string[];
   options?: IOptions;
 }
 

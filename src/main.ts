@@ -10,7 +10,8 @@ import {
   RepoTypes,
   RunnerGroup,
   StringOrMatchConfig,
-  MatchConfig
+  MatchConfig,
+  MatchConditions
 } from "./types";
 
 async function run() {
@@ -213,7 +214,7 @@ function printPattern(matcher: IMinimatch): string {
 function toMatchConfig(config: StringOrMatchConfig): MatchConfig {
   if (typeof config === "string") {
     return {
-      any: [config]
+      any: {patterns: [config]}
     };
   }
 
@@ -233,13 +234,15 @@ function checkGlobs(repoName: string, globs: StringOrMatchConfig[]): boolean {
 
 function checkMatch(repoName: string, matchConfig: MatchConfig): boolean {
   if (matchConfig.all !== undefined) {
-    if (!checkAll(repoName, matchConfig.all, matchConfig.options)) {
+    const matchers = toMatchers(matchConfig.all)
+    if (!checkAll(repoName, matchers)) {
       return false;
     }
   }
 
   if (matchConfig.any !== undefined) {
-    if (!checkAny(repoName, matchConfig.any, matchConfig.options)) {
+    const matchers = toMatchers(matchConfig.any)
+    if (!checkAny(repoName, matchers)) {
       return false;
     }
   }
@@ -247,16 +250,39 @@ function checkMatch(repoName: string, matchConfig: MatchConfig): boolean {
   return true;
 }
 
+
+function isArrayOfStrings(value: any): boolean {
+  return Array.isArray(value) && value.every(item => typeof item === "string");
+}
+
+
+function toMatchers(matchConditions: MatchConditions | string[]): Array<IMinimatch> | undefined{
+  let matchPatterns : string[] | undefined
+  let options :IOptions|undefined = undefined
+  if (isArrayOfStrings(matchConditions)) {
+    matchPatterns = matchConditions as string[]
+  }else{
+    const config = (matchConditions as MatchConditions)
+    matchPatterns = config.patterns
+    options= config.options
+  }
+  return  matchPatterns?.map(g => new Minimatch(g, options));
+}
+
+
 // equivalent to "Array.some()" but expanded for debugging and clarity
-function checkAny(repoName: string, globs: string[], matchOptions : IOptions | undefined): boolean {
-  const matchers = globs.map(g => new Minimatch(g, matchOptions ));
+function checkAny(repoName: string, matchers : Array<IMinimatch> | undefined): boolean {
   core.debug(`  checking "any" patterns against repo ${repoName}`);
+  if(!matchers){
+    core.debug(`   no patterns defined`);
+    return false;
+  }
 
   for (const matcher of matchers) {
     core.debug(`   - ${printPattern(matcher)}`);
     if (matcher.match(repoName)) {
       core.debug(`   ${printPattern(matcher)} matched`);
-      return false;
+      return true;
     }
   }
 
@@ -265,9 +291,12 @@ function checkAny(repoName: string, globs: string[], matchOptions : IOptions | u
 }
 
 // equivalent to "Array.every()" but expanded for debugging and clarity
-function checkAll(repoName: string, globs: string[], matchOptions : IOptions | undefined): boolean {
-  const matchers = globs.map(g => new Minimatch(g, matchOptions));
+function checkAll(repoName: string, matchers : Array<IMinimatch> | undefined): boolean {
   core.debug(` checking "all" patterns against repo ${repoName}`);
+  if(!matchers){
+    core.debug(`   no patterns defined`);
+    return false;
+  }
 
   for (const matcher of matchers) {
     core.debug(`   - ${printPattern(matcher)}`);
