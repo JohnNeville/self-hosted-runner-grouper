@@ -63,8 +63,11 @@ Create a workflow (eg: `.github/workflows/self-hosted-runner-grouper.yml` see [C
 ```
 name: "Sync Self-Hosted Runner Groups"
 on:
-# daily at midnight
-- cron:  '0 0 * * *' 
+  schedule:
+    # daily at midnight
+    - cron:  '0 0 * * *' 
+
+  workflow_dispatch:
 
 jobs:
   sync-runner-groups:
