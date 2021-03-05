@@ -14669,22 +14669,26 @@ const minimatch_1 = __webpack_require__(973);
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
+            core.info("Begin Org Self Hosted Runner Groups Sync");
             const token = core.getInput("org-auth-token", { required: true });
             const configPath = core.getInput("configuration-path", { required: true });
             const repoType = core.getInput("org-repo-type", { required: true });
             let orgName = core.getInput("org-name", { required: false });
-            const shouldOverwriteString = core.getInput("should-overwrite", {
+            const shouldOverwrite = core.getInput("should-overwrite", {
                 required: false
-            });
-            const shouldOverwrite = shouldOverwriteString == "true";
+            }) == "true";
             const shouldCreateMissingGroups = core.getInput("should-create-missing", {
                 required: false
-            });
+            }) == "true";
             const isDryRun = core.getInput("dry-run", { required: false }) == "true";
-            const client = new github.GitHub(token);
             if (!(orgName && orgName.trim())) {
                 orgName = github.context.repo.owner;
             }
+            core.debug(`Using the configurations in ${configPath} to manage groups in ${orgName} with the ${repoType} repos`);
+            core.debug(`Will overwrite manually added repos: ${shouldOverwrite}`);
+            core.debug(`Will create new groups: ${shouldCreateMissingGroups}`);
+            core.debug(`Is DryRun: ${isDryRun}`);
+            const client = new github.GitHub(token);
             // If dry-run is enabled then prevent post requests
             client.hook.wrap("request", (request, options) => __awaiter(this, void 0, void 0, function* () {
                 if (isDryRun && options.method != "GET") {

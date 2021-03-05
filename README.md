@@ -73,6 +73,8 @@ jobs:
   sync-runner-groups:
     runs-on: ubuntu-latest
     steps:
+    - name: Clone Repository
+      uses: actions/checkout@v2
     - uses: JohnNeville/self-hosted-runner-grouper@main
       with:
         org-auth-token: "${{ secrets.ORG_ADMIN_MACHINE_USER_PAT }}"
