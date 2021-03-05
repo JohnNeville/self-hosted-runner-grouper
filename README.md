@@ -60,9 +60,22 @@ TODO
 
 Create a workflow (eg: `.github/workflows/self-hosted-runner-grouper.yml` see [Creating a Workflow file](https://help.github.com/en/articles/configuring-a-workflow#creating-a-workflow-file)) to utilize the grouper action with content:
 
-TODO
+```
+name: "Sync Self-Hosted Runner Groups"
+on:
+# daily at midnight
+- cron:  '0 0 * * *' 
 
-_Note: This grants access to the `GITHUB_TOKEN` so the action can make calls to GitHub's rest API_
+jobs:
+  sync-runner-groups:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: JohnNeville/self-hosted-runner-grouper@main
+      with:
+        repo-token: "${{ secrets.ORG_ADMIN_MACHINE_USER_PAT }}"
+```
+
+_Note: This requires adding the github secret `ORG_ADMIN_MACHINE_USER_PAT` with an org admin Personal Access Token so the action can make calls to GitHub's rest API. As such, keeping this repo well protected is highly recommended_
 
 #### Inputs
 
