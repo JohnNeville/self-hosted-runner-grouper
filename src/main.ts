@@ -3,7 +3,7 @@ import * as github from "@actions/github";
 import { Octokit } from "@octokit/rest";
 import { GetResponseDataTypeFromEndpointMethod } from "@octokit/types";
 import * as yaml from "js-yaml";
-import { IMinimatch, Minimatch } from "minimatch";
+import { IMinimatch, Minimatch, IOptions } from "minimatch";
 import {
   ListReposWithAccessToSelfHostedRunnerGroupInOrgResponse,
   ListSelfHostedRunnersGroupResponse,
@@ -233,13 +233,13 @@ function checkGlobs(repoName: string, globs: StringOrMatchConfig[]): boolean {
 
 function checkMatch(repoName: string, matchConfig: MatchConfig): boolean {
   if (matchConfig.all !== undefined) {
-    if (!checkAll(repoName, matchConfig.all)) {
+    if (!checkAll(repoName, matchConfig.all, matchConfig.options)) {
       return false;
     }
   }
 
   if (matchConfig.any !== undefined) {
-    if (!checkAny(repoName, matchConfig.any)) {
+    if (!checkAny(repoName, matchConfig.any, matchConfig.options)) {
       return false;
     }
   }
@@ -248,32 +248,27 @@ function checkMatch(repoName: string, matchConfig: MatchConfig): boolean {
 }
 
 // equivalent to "Array.some()" but expanded for debugging and clarity
-function checkAny(repoName: string, globs: string[]): boolean {
-  const matchers = globs.map(g => new Minimatch(g));
-  core.debug(`  checking "any" patterns`);
-  if (isMatch(repoName, matchers)) {
-    core.debug(`  "any" patterns matched against ${repoName}`);
-    return true;
+function checkAny(repoName: string, globs: string[], matchOptions : IOptions | undefined): boolean {
+  const matchers = globs.map(g => new Minimatch(g, matchOptions ));
+  core.debug(`  checking "any" patterns against repo ${repoName}`);
+
+  for (const matcher of matchers) {
+    core.debug(`   - ${printPattern(matcher)}`);
+    if (matcher.match(repoName)) {
+      core.debug(`   ${printPattern(matcher)} matched`);
+      return false;
+    }
   }
 
-  core.debug(`  "any" patterns did not match any files`);
+  core.debug(`  "any" patterns did not match repo name`);
   return false;
 }
 
 // equivalent to "Array.every()" but expanded for debugging and clarity
-function checkAll(repoName: string, globs: string[]): boolean {
-  const matchers = globs.map(g => new Minimatch(g));
-  core.debug(` checking "all" patterns`);
-  if (!isMatch(repoName, matchers)) {
-    core.debug(`  "all" patterns did not match against ${repoName}`);
-    return false;
-  }
-  core.debug(`  "all" patterns matched all files`);
-  return true;
-}
+function checkAll(repoName: string, globs: string[], matchOptions : IOptions | undefined): boolean {
+  const matchers = globs.map(g => new Minimatch(g, matchOptions));
+  core.debug(` checking "all" patterns against repo ${repoName}`);
 
-function isMatch(repoName: string, matchers: IMinimatch[]): boolean {
-  core.debug(`    matching patterns against repoName ${repoName}`);
   for (const matcher of matchers) {
     core.debug(`   - ${printPattern(matcher)}`);
     if (!matcher.match(repoName)) {

@@ -1,6 +1,9 @@
+
+import { IOptions } from "minimatch";
 export interface MatchConfig {
   all?: string[];
   any?: string[];
+  options?: IOptions;
 }
 
 export type StringOrMatchConfig = string | MatchConfig;

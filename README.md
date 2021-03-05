@@ -18,15 +18,19 @@ The key is the name of the [self hosted runner group](https://docs.github.com/en
 For more control over matching, you can provide a match object instead of a simple path glob. The match object is defined as:
 
 ```yml
-- any: ['list', 'of', 'globs']
+- any: ['list', 'of', 'globs'] 
   all: ['list', 'of', 'globs']
+  options: 
+    nocase: true
+    etc...
 ```
 
-One or both fields can be provided for fine-grained matching. Unlike the top-level list, the list of path globs provided to `any` and `all` must ALL match against a path for the group to be applied.
+One or both fields can be provided for fine-grained matching.
 
 The fields are defined as follows:
-* `any`: match ALL globs against ANY changed path
-* `all`: match ALL globs against ALL changed paths
+* `any`: match AT LEAST ONE globs against repo name
+* `all`: match ALL globs against repo name
+* `options`: Allows you to set the options as defined by the [minimatch library](https://github.com/isaacs/minimatch/tree/master#options)
 
 A simple path glob is the equivalent to `any: ['glob']`. More specifically, the following two configurations are equivalent:
 ```yml

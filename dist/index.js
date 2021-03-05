@@ -14823,41 +14823,35 @@ function checkGlobs(repoName, globs) {
 }
 function checkMatch(repoName, matchConfig) {
     if (matchConfig.all !== undefined) {
-        if (!checkAll(repoName, matchConfig.all)) {
+        if (!checkAll(repoName, matchConfig.all, matchConfig.options)) {
             return false;
         }
     }
     if (matchConfig.any !== undefined) {
-        if (!checkAny(repoName, matchConfig.any)) {
+        if (!checkAny(repoName, matchConfig.any, matchConfig.options)) {
             return false;
         }
     }
     return true;
 }
 // equivalent to "Array.some()" but expanded for debugging and clarity
-function checkAny(repoName, globs) {
-    const matchers = globs.map(g => new minimatch_1.Minimatch(g));
-    core.debug(`  checking "any" patterns`);
-    if (isMatch(repoName, matchers)) {
-        core.debug(`  "any" patterns matched against ${repoName}`);
-        return true;
+function checkAny(repoName, globs, matchOptions) {
+    const matchers = globs.map(g => new minimatch_1.Minimatch(g, matchOptions));
+    core.debug(`  checking "any" patterns against repo ${repoName}`);
+    for (const matcher of matchers) {
+        core.debug(`   - ${printPattern(matcher)}`);
+        if (matcher.match(repoName)) {
+            core.debug(`   ${printPattern(matcher)} matched`);
+            return false;
+        }
     }
-    core.debug(`  "any" patterns did not match any files`);
+    core.debug(`  "any" patterns did not match repo name`);
     return false;
 }
 // equivalent to "Array.every()" but expanded for debugging and clarity
-function checkAll(repoName, globs) {
-    const matchers = globs.map(g => new minimatch_1.Minimatch(g));
-    core.debug(` checking "all" patterns`);
-    if (!isMatch(repoName, matchers)) {
-        core.debug(`  "all" patterns did not match against ${repoName}`);
-        return false;
-    }
-    core.debug(`  "all" patterns matched all files`);
-    return true;
-}
-function isMatch(repoName, matchers) {
-    core.debug(`    matching patterns against repoName ${repoName}`);
+function checkAll(repoName, globs, matchOptions) {
+    const matchers = globs.map(g => new minimatch_1.Minimatch(g, matchOptions));
+    core.debug(` checking "all" patterns against repo ${repoName}`);
     for (const matcher of matchers) {
         core.debug(`   - ${printPattern(matcher)}`);
         if (!matcher.match(repoName)) {
