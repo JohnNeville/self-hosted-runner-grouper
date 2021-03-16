@@ -14724,12 +14724,19 @@ function run() {
                 }
             }));
             // Load up all runners for the github org
+            core.info(`Loading Repos for Org`);
             const repositories = yield getAllRepositories(client, orgName, repoType);
+            core.info(`Found ${repositories.keys.length} repos`);
             // Get the existing runner groups
+            core.info(`Getting existing runner groups`);
             const existingRunnerGroups = yield getExistingRunnerGroups(client, orgName);
+            core.info(`Found ${existingRunnerGroups.length} runner groups`);
+            // Map Glob objects 
+            core.info(`Loading Globs from configuration file`);
             const groupGlobs = yield getGroupGlobs(client, configPath);
+            core.info(`Mapped ${groupGlobs.keys.length} glob groups`);
             // Validate managed runner groups
-            core.debug(`Validating groups`);
+            core.info(`Validating groups`);
             const groupsThatAreValid = new Map();
             const groupsToAdd = new Map();
             const invalidGroups = [];
@@ -14747,18 +14754,19 @@ function run() {
                     core.warning(`${group} is invalid. Skipping`);
                 }
             }
-            core.debug(`Validated ${groupsThatAreValid.keys.length} Groups`);
+            core.info(`Validated ${groupsThatAreValid.keys.length} Groups`);
+            core.info(`Need to add ${groupsToAdd.keys.length} Groups`);
             // Sync existing managed runner groups with repos
-            core.debug(`Syncing groups`);
+            core.info(`Syncing groups`);
             for (const [existingGroup, globs] of groupsThatAreValid.entries()) {
-                core.debug(`syncing ${existingGroup.name}`);
+                core.info(`syncing ${existingGroup.name}`);
                 yield syncExistingGroupToRepo(client, orgName, existingGroup.id, repositories, globs, shouldOverwrite);
             }
             // Create missing managed runner groups with matching repos
-            core.debug(`Adding missing groups`);
+            core.info(`Adding missing groups`);
             if (shouldCreateMissingGroups) {
                 for (const [group, globs] of groupsToAdd.entries()) {
-                    core.debug(`creating ${group}`);
+                    core.info(`creating ${group}`);
                     yield addMissingGroupToRepo(client, orgName, group, repositories, globs);
                 }
             }
@@ -14780,13 +14788,11 @@ function isSupportedRunnerGroup(group) {
 }
 function getGroupGlobs(client, configurationPath) {
     return __awaiter(this, void 0, void 0, function* () {
-        core.debug(`Loading Globs from configuration file`);
         const configurationContent = yield fetchContent(client, configurationPath);
         // loads (hopefully) a `{[group:string]: string | StringOrMatchConfig[]}`, but is `any`:
         const configObject = yaml.safeLoad(configurationContent);
         // transform `any` => `Map<string,StringOrMatchConfig[]>` or throw if yaml is malformed:
         const globs = getGroupGlobMapFromObject(configObject);
-        core.debug(`Mapped ${globs.keys.length} glob maps`);
         return globs;
     });
 }
@@ -14933,24 +14939,20 @@ function getMatchingReposIds(repositories, globs) {
 }
 function getAllRepositories(client, orgName, repoType) {
     return __awaiter(this, void 0, void 0, function* () {
-        core.debug(`Loading Repos for Org`);
         const listForOrgOptions = client.repos.listForOrg.endpoint.merge({
             org: orgName,
             type: repoType
         });
         const repositories = (yield client.paginate(listForOrgOptions));
-        core.debug(`Found ${repositories.keys.length} repos`);
         return repositories;
     });
 }
 function getExistingRunnerGroups(client, orgName) {
     return __awaiter(this, void 0, void 0, function* () {
-        core.debug(`Getting existing runner groups`);
         const apiResponse = yield client.request("GET /orgs/{org}/actions/runner-groups", {
             org: orgName
         });
         const orgRunnerGroupsResponse = apiResponse.data;
-        core.debug(`Found ${orgRunnerGroupsResponse.runner_groups.length} runner groups`);
         return orgRunnerGroupsResponse.runner_groups;
     });
 }

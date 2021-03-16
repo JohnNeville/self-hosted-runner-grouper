@@ -83,18 +83,26 @@ async function run() {
     });
 
     // Load up all runners for the github org
+    core.info(`Loading Repos for Org`);
     const repositories = await getAllRepositories(client, orgName, repoType)
+    core.info(`Found ${repositories.keys.length} repos`);
 
     // Get the existing runner groups
+    core.info(`Getting existing runner groups`);
     const existingRunnerGroups = await getExistingRunnerGroups(client, orgName);
+    core.info(`Found ${existingRunnerGroups.length} runner groups`);
 
+
+    // Map Glob objects 
+    core.info(`Loading Globs from configuration file`);
     const groupGlobs: Map<string, StringOrMatchConfig[]> = await getGroupGlobs(
       client,
       configPath
     );
+    core.info(`Mapped ${groupGlobs.keys.length} glob groups`)
 
     // Validate managed runner groups
-    core.debug(`Validating groups`);
+    core.info(`Validating groups`);
     const groupsThatAreValid: Map<
       RunnerGroup,
       StringOrMatchConfig[]
@@ -115,12 +123,13 @@ async function run() {
         core.warning(`${group} is invalid. Skipping`);
       }
     }
-    core.debug(`Validated ${groupsThatAreValid.keys.length} Groups`);
+    core.info(`Validated ${groupsThatAreValid.keys.length} Groups`);
+    core.info(`Need to add ${groupsToAdd.keys.length} Groups`);
 
     // Sync existing managed runner groups with repos
-    core.debug(`Syncing groups`);
+    core.info(`Syncing groups`);
     for (const [existingGroup, globs] of groupsThatAreValid.entries()) {
-      core.debug(`syncing ${existingGroup.name}`);
+      core.info(`syncing ${existingGroup.name}`);
       await syncExistingGroupToRepo(
         client,
         orgName,
@@ -132,10 +141,10 @@ async function run() {
     }
 
     // Create missing managed runner groups with matching repos
-    core.debug(`Adding missing groups`);
+    core.info(`Adding missing groups`);
     if (shouldCreateMissingGroups) {
       for (const [group, globs] of groupsToAdd.entries()) {
-        core.debug(`creating ${group}`);
+        core.info(`creating ${group}`);
         await addMissingGroupToRepo(
           client,
           orgName,
@@ -167,7 +176,6 @@ async function getGroupGlobs(
   client: github.GitHub,
   configurationPath: string
 ): Promise<Map<string, StringOrMatchConfig[]>> {
-  core.debug(`Loading Globs from configuration file`);
   const configurationContent: string = await fetchContent(
     client,
     configurationPath
@@ -178,8 +186,6 @@ async function getGroupGlobs(
     
   // transform `any` => `Map<string,StringOrMatchConfig[]>` or throw if yaml is malformed:
   const globs =  getGroupGlobMapFromObject(configObject);
-
-  core.debug(`Mapped ${globs.keys.length} glob maps`);
   return globs
 }
 
@@ -197,7 +203,6 @@ async function fetchContent(
   } catch(err) {
     core.debug(`Unable to find file locally ${err}`);
   }
-
 
   core.debug(`Fetching file from Github API`);
   try{
@@ -357,7 +362,6 @@ async function getAllRepositories(
   orgName: string, 
   repoType: string
 ): Promise<Octokit.ReposListForOrgResponse> {
-  core.debug(`Loading Repos for Org`);
   const listForOrgOptions = client.repos.listForOrg.endpoint.merge({
     org: orgName,
     type: repoType as RepoTypes
@@ -370,7 +374,6 @@ async function getAllRepositories(
     listForOrgOptions
   )) as listRepoResponseType;
 
-  core.debug(`Found ${repositories.keys.length} repos`);
   return repositories
 }
 
@@ -378,7 +381,6 @@ async function getExistingRunnerGroups(
   client: github.GitHub,
   orgName: string
 ): Promise<Array<RunnerGroup>> {
-  core.debug(`Getting existing runner groups`);
   const apiResponse = await client.request(
     "GET /orgs/{org}/actions/runner-groups",
     {
@@ -386,7 +388,6 @@ async function getExistingRunnerGroups(
     }
   );
   const orgRunnerGroupsResponse = apiResponse.data as ListSelfHostedRunnersGroupResponse;
-  core.debug(`Found ${orgRunnerGroupsResponse.runner_groups.length} runner groups`);
   return orgRunnerGroupsResponse.runner_groups;
 }
 
