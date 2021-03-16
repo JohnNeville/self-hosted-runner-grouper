@@ -14661,11 +14661,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const core = __importStar(__webpack_require__(186));
 const github = __importStar(__webpack_require__(438));
 const yaml = __importStar(__webpack_require__(917));
 const minimatch_1 = __webpack_require__(973);
+const fs_1 = __importDefault(__webpack_require__(747));
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -14776,22 +14780,45 @@ function isSupportedRunnerGroup(group) {
 }
 function getGroupGlobs(client, configurationPath) {
     return __awaiter(this, void 0, void 0, function* () {
+        core.debug(`Loading Globs from configuration file`);
         const configurationContent = yield fetchContent(client, configurationPath);
         // loads (hopefully) a `{[group:string]: string | StringOrMatchConfig[]}`, but is `any`:
         const configObject = yaml.safeLoad(configurationContent);
         // transform `any` => `Map<string,StringOrMatchConfig[]>` or throw if yaml is malformed:
-        return getGroupGlobMapFromObject(configObject);
+        const globs = getGroupGlobMapFromObject(configObject);
+        core.debug(`Mapped ${globs.keys.length} glob maps`);
+        return globs;
     });
 }
 function fetchContent(client, repoPath) {
     return __awaiter(this, void 0, void 0, function* () {
-        const response = yield client.repos.getContents({
-            owner: github.context.repo.owner,
-            repo: github.context.repo.repo,
-            path: repoPath,
-            ref: github.context.sha
-        });
-        return Buffer.from(response.data.content, response.data.encoding).toString();
+        core.debug(`Trying to load file locally`);
+        try {
+            if (fs_1.default.existsSync(repoPath)) {
+                const fileContents = Buffer.from(repoPath, 'utf8').toString();
+                core.debug(`File loaded`);
+                return fileContents;
+            }
+        }
+        catch (err) {
+            core.debug(`Unable to find file locally ${err}`);
+        }
+        core.debug(`Fetching file from Github API`);
+        try {
+            const response = yield client.repos.getContents({
+                owner: github.context.repo.owner,
+                repo: github.context.repo.repo,
+                path: repoPath,
+                ref: github.context.sha
+            });
+            const fileContents = Buffer.from(response.data.content, response.data.encoding).toString();
+            core.debug(`File loaded`);
+            return fileContents;
+        }
+        catch (err) {
+            core.error(`Unable to find file locally or through Github API. If you prefer the Github API rather than checking out then you must give the token repo:* access as well ${err}`);
+            throw (err);
+        }
     });
 }
 function getGroupGlobMapFromObject(configObject) {

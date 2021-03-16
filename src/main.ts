@@ -14,6 +14,7 @@ import {
   MatchConfig,
   MatchConditions
 } from "./types";
+import fs from 'fs'
 
 async function run() {
   try {
@@ -166,6 +167,7 @@ async function getGroupGlobs(
   client: github.GitHub,
   configurationPath: string
 ): Promise<Map<string, StringOrMatchConfig[]>> {
+  core.debug(`Loading Globs from configuration file`);
   const configurationContent: string = await fetchContent(
     client,
     configurationPath
@@ -173,23 +175,46 @@ async function getGroupGlobs(
 
   // loads (hopefully) a `{[group:string]: string | StringOrMatchConfig[]}`, but is `any`:
   const configObject: any = yaml.safeLoad(configurationContent);
-
+    
   // transform `any` => `Map<string,StringOrMatchConfig[]>` or throw if yaml is malformed:
-  return getGroupGlobMapFromObject(configObject);
+  const globs =  getGroupGlobMapFromObject(configObject);
+
+  core.debug(`Mapped ${globs.keys.length} glob maps`);
+  return globs
 }
 
 async function fetchContent(
   client: github.GitHub,
   repoPath: string
 ): Promise<string> {
-  const response: any = await client.repos.getContents({
-    owner: github.context.repo.owner,
-    repo: github.context.repo.repo,
-    path: repoPath,
-    ref: github.context.sha
-  });
+  core.debug(`Trying to load file locally`);
+  try {
+    if (fs.existsSync(repoPath)) {
+      const fileContents = Buffer.from(repoPath, 'utf8').toString();
+      core.debug(`File loaded`);
+      return fileContents
+    }
+  } catch(err) {
+    core.debug(`Unable to find file locally ${err}`);
+  }
 
-  return Buffer.from(response.data.content, response.data.encoding).toString();
+
+  core.debug(`Fetching file from Github API`);
+  try{
+    const response: any = await client.repos.getContents({
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
+      path: repoPath,
+      ref: github.context.sha
+    });
+  
+    const fileContents = Buffer.from(response.data.content, response.data.encoding).toString();
+    core.debug(`File loaded`);
+    return fileContents
+  } catch(err) {
+    core.error(`Unable to find file locally or through Github API. If you prefer the Github API rather than checking out then you must give the token repo:* access as well ${err}`);
+    throw(err)
+  }
 }
 
 function getGroupGlobMapFromObject(
