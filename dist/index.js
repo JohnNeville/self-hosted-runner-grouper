@@ -14754,8 +14754,8 @@ function run() {
                     core.warning(`${group} is invalid. Skipping`);
                 }
             }
-            core.info(`Validated ${groupsThatAreValid.size} Groups`);
-            core.info(`Need to add ${groupsToAdd.size} Groups`);
+            core.info(`Will Sync ${groupsThatAreValid.size} Groups`);
+            core.info(`Will Add ${groupsToAdd.size} Groups`);
             // Sync existing managed runner groups with repos
             core.info(`Syncing groups`);
             for (const [existingGroup, globs] of groupsThatAreValid.entries()) {
