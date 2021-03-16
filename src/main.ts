@@ -31,6 +31,7 @@ async function run() {
         required: false
       }) == "true";
     const isDryRun = core.getInput("dry-run", { required: false }) == "true";
+    const isDebug = core.getInput("debug-requests", { required: false }) == "true";
 
     if (!(orgName && orgName.trim())) {
       orgName = github.context.repo.owner;
@@ -47,6 +48,12 @@ async function run() {
 
     // If dry-run is enabled then prevent post requests
     client.hook.wrap("request", async (request, options) => {
+      if( isDebug ){
+        core.info(
+          `${options.method} ${options.url}: ${JSON.stringify(options)}`
+        ); 
+      }
+      
       if (isDryRun && options.method != "GET") {
         core.info(
           "Dry Run Enabled: Preventing non-get requests. The request would have been:"
