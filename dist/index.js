@@ -14726,7 +14726,7 @@ function run() {
             // Load up all runners for the github org
             core.info(`Loading Repos for Org`);
             const repositories = yield getAllRepositories(client, orgName, repoType);
-            core.info(`Found ${repositories.keys.length} repos`);
+            core.info(`Found ${repositories.length} repos`);
             // Get the existing runner groups
             core.info(`Getting existing runner groups`);
             const existingRunnerGroups = yield getExistingRunnerGroups(client, orgName);
@@ -14734,7 +14734,7 @@ function run() {
             // Map Glob objects 
             core.info(`Loading Globs from configuration file`);
             const groupGlobs = yield getGroupGlobs(client, configPath);
-            core.info(`Mapped ${groupGlobs.keys.length} glob groups`);
+            core.info(`Mapped ${groupGlobs.size} glob groups`);
             // Validate managed runner groups
             core.info(`Validating groups`);
             const groupsThatAreValid = new Map();
@@ -14754,8 +14754,8 @@ function run() {
                     core.warning(`${group} is invalid. Skipping`);
                 }
             }
-            core.info(`Validated ${groupsThatAreValid.keys.length} Groups`);
-            core.info(`Need to add ${groupsToAdd.keys.length} Groups`);
+            core.info(`Validated ${groupsThatAreValid.size} Groups`);
+            core.info(`Need to add ${groupsToAdd.size} Groups`);
             // Sync existing managed runner groups with repos
             core.info(`Syncing groups`);
             for (const [existingGroup, globs] of groupsThatAreValid.entries()) {
