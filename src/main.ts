@@ -1,6 +1,7 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { Octokit } from "@octokit/rest";
+import {OctokitOptions} from '@octokit/core/dist-types/types'
 import { GetResponseDataTypeFromEndpointMethod } from "@octokit/types";
 import * as yaml from "js-yaml";
 import { IMinimatch, Minimatch, IOptions } from "minimatch";
@@ -43,17 +44,23 @@ async function run() {
     core.debug(`Will overwrite manually added repos: ${shouldOverwrite}`);
     core.debug(`Will create new groups: ${shouldCreateMissingGroups}`);
     core.debug(`Is DryRun: ${isDryRun}`);
+    core.debug(`Is Debugging Enabled: ${isDebug}`);
 
-    const client = new github.GitHub(token);
+    let octokitOptions = {} as OctokitOptions
+    if(isDebug){
+      octokitOptions = {
+        log: {
+          debug: console.info,
+          info: console.info,
+          warn: console.warn,
+          error: console.error
+        },
+      } as OctokitOptions;
+    }
+    const client = new github.GitHub(token, octokitOptions);
 
     // If dry-run is enabled then prevent post requests
     client.hook.wrap("request", async (request, options) => {
-      if( isDebug ){
-        core.info(
-          `${options.method} ${options.url}: ${JSON.stringify(options)}`
-        ); 
-      }
-      
       if (isDryRun && options.method != "GET") {
         core.info(
           "Dry Run Enabled: Preventing non-get requests. The request would have been:"
@@ -75,21 +82,9 @@ async function run() {
     });
 
     // Load up all runners for the github org
-    core.debug(`Loading Repos for Org`);
-    const listForOrgOptions = client.repos.listForOrg.endpoint.merge({
-      org: orgName,
-      type: repoType as RepoTypes
-    });
-
-    type listRepoResponseType = GetResponseDataTypeFromEndpointMethod<
-      typeof client.repos.listForOrg
-    >;
-    const repositories = (await client.paginate(
-      listForOrgOptions
-    )) as listRepoResponseType;
+    const repositories = await getAllRepositories(client, orgName, repoType)
 
     // Get the existing runner groups
-    core.debug(`Getting existing runner groups`);
     const existingRunnerGroups = await getExistingRunnerGroups(client, orgName);
 
     const groupGlobs: Map<string, StringOrMatchConfig[]> = await getGroupGlobs(
@@ -116,8 +111,10 @@ async function run() {
         groupsThatAreValid.set(matchingExistingGroup, globs);
       } else {
         invalidGroups.push(group);
+        core.warning(`${group} is invalid. Skipping`);
       }
     }
+    core.debug(`Validated ${groupsThatAreValid.keys.length} Groups`);
 
     // Sync existing managed runner groups with repos
     core.debug(`Syncing groups`);
@@ -330,10 +327,33 @@ function getMatchingReposIds(
   return repositoryIds;
 }
 
+async function getAllRepositories(
+  client: github.GitHub, 
+  orgName: string, 
+  repoType: string
+): Promise<Octokit.ReposListForOrgResponse> {
+  core.debug(`Loading Repos for Org`);
+  const listForOrgOptions = client.repos.listForOrg.endpoint.merge({
+    org: orgName,
+    type: repoType as RepoTypes
+  });
+
+  type listRepoResponseType = GetResponseDataTypeFromEndpointMethod<
+    typeof client.repos.listForOrg
+  >;
+  const repositories = (await client.paginate(
+    listForOrgOptions
+  )) as listRepoResponseType;
+
+  core.debug(`Found ${repositories.keys.length} repos`);
+  return repositories
+}
+
 async function getExistingRunnerGroups(
   client: github.GitHub,
   orgName: string
 ): Promise<Array<RunnerGroup>> {
+  core.debug(`Getting existing runner groups`);
   const apiResponse = await client.request(
     "GET /orgs/{org}/actions/runner-groups",
     {
@@ -341,6 +361,7 @@ async function getExistingRunnerGroups(
     }
   );
   const orgRunnerGroupsResponse = apiResponse.data as ListSelfHostedRunnersGroupResponse;
+  core.debug(`Found ${orgRunnerGroupsResponse.runner_groups.length} runner groups`);
   return orgRunnerGroupsResponse.runner_groups;
 }
 
@@ -394,6 +415,8 @@ async function addMissingGroupToRepo(
   });
 }
 
+
+
 async function getSelectedReposForRunnerGroups(
   client: github.GitHub,
   orgName: string,
@@ -426,3 +449,5 @@ async function setSelectedReposForRunnerGroups(
 }
 
 run();
+
+
