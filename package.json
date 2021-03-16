@@ -7,8 +7,7 @@
     "build": "tsc && ncc build lib/main.js",
     "format": "prettier --write **/*.ts",
     "format-check": "prettier --check **/*.ts",
-    "test": "jest",
-    "prepare": "husky install"
+    "test": "jest"
   },
   "repository": {
     "type": "git",
@@ -31,6 +30,7 @@
     "semver": "^6.1.1"
   },
   "devDependencies": {
+    "@octokit/core": "^3.3.1",
     "@types/jest": "^24.0.13",
     "@types/js-yaml": "^3.12.1",
     "@types/minimatch": "^3.0.0",

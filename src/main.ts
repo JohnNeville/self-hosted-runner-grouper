@@ -1,6 +1,7 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { Octokit } from "@octokit/rest";
+import {OctokitOptions} from '@octokit/core/dist-types/types'
 import { GetResponseDataTypeFromEndpointMethod } from "@octokit/types";
 import * as yaml from "js-yaml";
 import { IMinimatch, Minimatch, IOptions } from "minimatch";
@@ -13,6 +14,7 @@ import {
   MatchConfig,
   MatchConditions
 } from "./types";
+import fs from 'fs'
 
 async function run() {
   try {
@@ -31,6 +33,7 @@ async function run() {
         required: false
       }) == "true";
     const isDryRun = core.getInput("dry-run", { required: false }) == "true";
+    const isDebug = core.getInput("debug-requests", { required: false }) == "true";
 
     if (!(orgName && orgName.trim())) {
       orgName = github.context.repo.owner;
@@ -42,8 +45,20 @@ async function run() {
     core.debug(`Will overwrite manually added repos: ${shouldOverwrite}`);
     core.debug(`Will create new groups: ${shouldCreateMissingGroups}`);
     core.debug(`Is DryRun: ${isDryRun}`);
+    core.debug(`Is Debugging Enabled: ${isDebug}`);
 
-    const client = new github.GitHub(token);
+    let octokitOptions = {} as OctokitOptions
+    if(isDebug){
+      octokitOptions = {
+        log: {
+          debug: console.info,
+          info: console.info,
+          warn: console.warn,
+          error: console.error
+        },
+      } as OctokitOptions;
+    }
+    const client = new github.GitHub(token, octokitOptions);
 
     // If dry-run is enabled then prevent post requests
     client.hook.wrap("request", async (request, options) => {
@@ -68,30 +83,26 @@ async function run() {
     });
 
     // Load up all runners for the github org
-    core.debug(`Loading Repos for Org`);
-    const listForOrgOptions = client.repos.listForOrg.endpoint.merge({
-      org: orgName,
-      type: repoType as RepoTypes
-    });
-
-    type listRepoResponseType = GetResponseDataTypeFromEndpointMethod<
-      typeof client.repos.listForOrg
-    >;
-    const repositories = (await client.paginate(
-      listForOrgOptions
-    )) as listRepoResponseType;
+    core.info(`Loading Repos for Org`);
+    const repositories = await getAllRepositories(client, orgName, repoType)
+    core.info(`Found ${repositories.length} repos`);
 
     // Get the existing runner groups
-    core.debug(`Getting existing runner groups`);
+    core.info(`Getting existing runner groups`);
     const existingRunnerGroups = await getExistingRunnerGroups(client, orgName);
+    core.info(`Found ${existingRunnerGroups.length} runner groups`);
 
+
+    // Map Glob objects 
+    core.info(`Loading Globs from configuration file`);
     const groupGlobs: Map<string, StringOrMatchConfig[]> = await getGroupGlobs(
       client,
       configPath
     );
+    core.info(`Mapped ${groupGlobs.size} glob groups`)
 
     // Validate managed runner groups
-    core.debug(`Validating groups`);
+    core.info(`Validating groups`);
     const groupsThatAreValid: Map<
       RunnerGroup,
       StringOrMatchConfig[]
@@ -109,13 +120,16 @@ async function run() {
         groupsThatAreValid.set(matchingExistingGroup, globs);
       } else {
         invalidGroups.push(group);
+        core.warning(`${group} is invalid. Skipping`);
       }
     }
+    core.info(`Will Sync ${groupsThatAreValid.size} Groups`);
+    core.info(`Will Add ${groupsToAdd.size} Groups`);
 
     // Sync existing managed runner groups with repos
-    core.debug(`Syncing groups`);
+    core.info(`Syncing groups`);
     for (const [existingGroup, globs] of groupsThatAreValid.entries()) {
-      core.debug(`syncing ${existingGroup.name}`);
+      core.info(`syncing ${existingGroup.name}`);
       await syncExistingGroupToRepo(
         client,
         orgName,
@@ -127,10 +141,10 @@ async function run() {
     }
 
     // Create missing managed runner groups with matching repos
-    core.debug(`Adding missing groups`);
+    core.info(`Adding missing groups`);
     if (shouldCreateMissingGroups) {
       for (const [group, globs] of groupsToAdd.entries()) {
-        core.debug(`creating ${group}`);
+        core.info(`creating ${group}`);
         await addMissingGroupToRepo(
           client,
           orgName,
@@ -169,23 +183,45 @@ async function getGroupGlobs(
 
   // loads (hopefully) a `{[group:string]: string | StringOrMatchConfig[]}`, but is `any`:
   const configObject: any = yaml.safeLoad(configurationContent);
-
+    
   // transform `any` => `Map<string,StringOrMatchConfig[]>` or throw if yaml is malformed:
-  return getGroupGlobMapFromObject(configObject);
+  const globs =  getGroupGlobMapFromObject(configObject);
+  return globs
 }
 
 async function fetchContent(
   client: github.GitHub,
   repoPath: string
 ): Promise<string> {
-  const response: any = await client.repos.getContents({
-    owner: github.context.repo.owner,
-    repo: github.context.repo.repo,
-    path: repoPath,
-    ref: github.context.sha
-  });
+  core.debug(`Trying to load file locally`);
+  try {
+    if (fs.existsSync(repoPath)) {
+      fs.readFile(repoPath, 'utf8', function(err, data) {
+        if (err) throw err;
+        core.debug(`File loaded`);
+        return data
+      });
+    }
+  } catch(err) {
+    core.debug(`Unable to find file locally ${err}`);
+  }
 
-  return Buffer.from(response.data.content, response.data.encoding).toString();
+  core.debug(`Fetching file from Github API`);
+  try{
+    const response: any = await client.repos.getContents({
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
+      path: repoPath,
+      ref: github.context.sha
+    });
+  
+    const fileContents = Buffer.from(response.data.content, response.data.encoding).toString();
+    core.debug(`File loaded`);
+    return fileContents
+  } catch(err) {
+    core.error(`Unable to find file locally or through Github API. If you prefer the Github API rather than checking out then you must give the token repo:* access as well ${err}`);
+    throw(err)
+  }
 }
 
 function getGroupGlobMapFromObject(
@@ -323,6 +359,26 @@ function getMatchingReposIds(
   return repositoryIds;
 }
 
+async function getAllRepositories(
+  client: github.GitHub, 
+  orgName: string, 
+  repoType: string
+): Promise<Octokit.ReposListForOrgResponse> {
+  const listForOrgOptions = client.repos.listForOrg.endpoint.merge({
+    org: orgName,
+    type: repoType as RepoTypes
+  });
+
+  type listRepoResponseType = GetResponseDataTypeFromEndpointMethod<
+    typeof client.repos.listForOrg
+  >;
+  const repositories = (await client.paginate(
+    listForOrgOptions
+  )) as listRepoResponseType;
+
+  return repositories
+}
+
 async function getExistingRunnerGroups(
   client: github.GitHub,
   orgName: string
@@ -387,6 +443,8 @@ async function addMissingGroupToRepo(
   });
 }
 
+
+
 async function getSelectedReposForRunnerGroups(
   client: github.GitHub,
   orgName: string,
@@ -419,3 +477,5 @@ async function setSelectedReposForRunnerGroups(
 }
 
 run();
+
+

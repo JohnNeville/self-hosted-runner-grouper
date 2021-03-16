@@ -124,3 +124,4 @@ Various inputs are defined in [`action.yml`](action.yml) to let you configure th
 | `should-overwrite` | Whether or not to remove non-matching repos from managed groups | true |
 | `should-create-missing` | Whether or not to add new groups that are missing | true |
 | `dry-run` | Simulate non-GET API calls rather than actually performing the action | false |
+| `debug-requests` | Log requests as info level in Github Actions for debugging | false |

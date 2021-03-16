@@ -14661,11 +14661,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const core = __importStar(__webpack_require__(186));
 const github = __importStar(__webpack_require__(438));
 const yaml = __importStar(__webpack_require__(917));
 const minimatch_1 = __webpack_require__(973);
+const fs_1 = __importDefault(__webpack_require__(747));
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -14681,6 +14685,7 @@ function run() {
                 required: false
             }) == "true";
             const isDryRun = core.getInput("dry-run", { required: false }) == "true";
+            const isDebug = core.getInput("debug-requests", { required: false }) == "true";
             if (!(orgName && orgName.trim())) {
                 orgName = github.context.repo.owner;
             }
@@ -14688,7 +14693,19 @@ function run() {
             core.debug(`Will overwrite manually added repos: ${shouldOverwrite}`);
             core.debug(`Will create new groups: ${shouldCreateMissingGroups}`);
             core.debug(`Is DryRun: ${isDryRun}`);
-            const client = new github.GitHub(token);
+            core.debug(`Is Debugging Enabled: ${isDebug}`);
+            let octokitOptions = {};
+            if (isDebug) {
+                octokitOptions = {
+                    log: {
+                        debug: console.info,
+                        info: console.info,
+                        warn: console.warn,
+                        error: console.error
+                    },
+                };
+            }
+            const client = new github.GitHub(token, octokitOptions);
             // If dry-run is enabled then prevent post requests
             client.hook.wrap("request", (request, options) => __awaiter(this, void 0, void 0, function* () {
                 if (isDryRun && options.method != "GET") {
@@ -14707,18 +14724,19 @@ function run() {
                 }
             }));
             // Load up all runners for the github org
-            core.debug(`Loading Repos for Org`);
-            const listForOrgOptions = client.repos.listForOrg.endpoint.merge({
-                org: orgName,
-                type: repoType
-            });
-            const repositories = (yield client.paginate(listForOrgOptions));
+            core.info(`Loading Repos for Org`);
+            const repositories = yield getAllRepositories(client, orgName, repoType);
+            core.info(`Found ${repositories.length} repos`);
             // Get the existing runner groups
-            core.debug(`Getting existing runner groups`);
+            core.info(`Getting existing runner groups`);
             const existingRunnerGroups = yield getExistingRunnerGroups(client, orgName);
+            core.info(`Found ${existingRunnerGroups.length} runner groups`);
+            // Map Glob objects 
+            core.info(`Loading Globs from configuration file`);
             const groupGlobs = yield getGroupGlobs(client, configPath);
+            core.info(`Mapped ${groupGlobs.size} glob groups`);
             // Validate managed runner groups
-            core.debug(`Validating groups`);
+            core.info(`Validating groups`);
             const groupsThatAreValid = new Map();
             const groupsToAdd = new Map();
             const invalidGroups = [];
@@ -14733,19 +14751,22 @@ function run() {
                 }
                 else {
                     invalidGroups.push(group);
+                    core.warning(`${group} is invalid. Skipping`);
                 }
             }
+            core.info(`Will Sync ${groupsThatAreValid.size} Groups`);
+            core.info(`Will Add ${groupsToAdd.size} Groups`);
             // Sync existing managed runner groups with repos
-            core.debug(`Syncing groups`);
+            core.info(`Syncing groups`);
             for (const [existingGroup, globs] of groupsThatAreValid.entries()) {
-                core.debug(`syncing ${existingGroup.name}`);
+                core.info(`syncing ${existingGroup.name}`);
                 yield syncExistingGroupToRepo(client, orgName, existingGroup.id, repositories, globs, shouldOverwrite);
             }
             // Create missing managed runner groups with matching repos
-            core.debug(`Adding missing groups`);
+            core.info(`Adding missing groups`);
             if (shouldCreateMissingGroups) {
                 for (const [group, globs] of groupsToAdd.entries()) {
-                    core.debug(`creating ${group}`);
+                    core.info(`creating ${group}`);
                     yield addMissingGroupToRepo(client, orgName, group, repositories, globs);
                 }
             }
@@ -14771,18 +14792,42 @@ function getGroupGlobs(client, configurationPath) {
         // loads (hopefully) a `{[group:string]: string | StringOrMatchConfig[]}`, but is `any`:
         const configObject = yaml.safeLoad(configurationContent);
         // transform `any` => `Map<string,StringOrMatchConfig[]>` or throw if yaml is malformed:
-        return getGroupGlobMapFromObject(configObject);
+        const globs = getGroupGlobMapFromObject(configObject);
+        return globs;
     });
 }
 function fetchContent(client, repoPath) {
     return __awaiter(this, void 0, void 0, function* () {
-        const response = yield client.repos.getContents({
-            owner: github.context.repo.owner,
-            repo: github.context.repo.repo,
-            path: repoPath,
-            ref: github.context.sha
-        });
-        return Buffer.from(response.data.content, response.data.encoding).toString();
+        core.debug(`Trying to load file locally`);
+        try {
+            if (fs_1.default.existsSync(repoPath)) {
+                fs_1.default.readFile(repoPath, 'utf8', function (err, data) {
+                    if (err)
+                        throw err;
+                    core.debug(`File loaded`);
+                    return data;
+                });
+            }
+        }
+        catch (err) {
+            core.debug(`Unable to find file locally ${err}`);
+        }
+        core.debug(`Fetching file from Github API`);
+        try {
+            const response = yield client.repos.getContents({
+                owner: github.context.repo.owner,
+                repo: github.context.repo.repo,
+                path: repoPath,
+                ref: github.context.sha
+            });
+            const fileContents = Buffer.from(response.data.content, response.data.encoding).toString();
+            core.debug(`File loaded`);
+            return fileContents;
+        }
+        catch (err) {
+            core.error(`Unable to find file locally or through Github API. If you prefer the Github API rather than checking out then you must give the token repo:* access as well ${err}`);
+            throw (err);
+        }
     });
 }
 function getGroupGlobMapFromObject(configObject) {
@@ -14894,6 +14939,16 @@ function getMatchingReposIds(repositories, globs) {
         }
     }
     return repositoryIds;
+}
+function getAllRepositories(client, orgName, repoType) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const listForOrgOptions = client.repos.listForOrg.endpoint.merge({
+            org: orgName,
+            type: repoType
+        });
+        const repositories = (yield client.paginate(listForOrgOptions));
+        return repositories;
+    });
 }
 function getExistingRunnerGroups(client, orgName) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -29942,7 +29997,7 @@ module.exports = new Schema({
 /***/ 954:
 /***/ (function(module) {
 
-module.exports = {"_from":"@octokit/rest@^16.43.1","_id":"@octokit/rest@16.43.2","_inBundle":false,"_integrity":"sha512-ngDBevLbBTFfrHZeiS7SAMAZ6ssuVmXuya+F/7RaVvlysgGa1JKJkKWY+jV6TCJYcW0OALfJ7nTIGXcBXzycfQ==","_location":"/@octokit/rest","_phantomChildren":{"deprecation":"2.3.1","once":"1.4.0","os-name":"3.1.0"},"_requested":{"type":"range","registry":true,"raw":"@octokit/rest@^16.43.1","name":"@octokit/rest","escapedName":"@octokit%2frest","scope":"@octokit","rawSpec":"^16.43.1","saveSpec":null,"fetchSpec":"^16.43.1"},"_requiredBy":["/@actions/github"],"_resolved":"https://registry.npmjs.org/@octokit/rest/-/rest-16.43.2.tgz","_shasum":"c53426f1e1d1044dee967023e3279c50993dd91b","_spec":"@octokit/rest@^16.43.1","_where":"C:\\Source\\github-orgs-group-manager\\node_modules\\@actions\\github","author":{"name":"Gregor Martynus","url":"https://github.com/gr2m"},"bugs":{"url":"https://github.com/octokit/rest.js/issues"},"bundleDependencies":false,"bundlesize":[{"path":"./dist/octokit-rest.min.js.gz","maxSize":"33 kB"}],"contributors":[{"name":"Mike de Boer","email":"info@mikedeboer.nl"},{"name":"Fabian Jakobs","email":"fabian@c9.io"},{"name":"Joe Gallo","email":"joe@brassafrax.com"},{"name":"Gregor Martynus","url":"https://github.com/gr2m"}],"dependencies":{"@octokit/auth-token":"^2.4.0","@octokit/plugin-paginate-rest":"^1.1.1","@octokit/plugin-request-log":"^1.0.0","@octokit/plugin-rest-endpoint-methods":"2.4.0","@octokit/request":"^5.2.0","@octokit/request-error":"^1.0.2","atob-lite":"^2.0.0","before-after-hook":"^2.0.0","btoa-lite":"^1.0.0","deprecation":"^2.0.0","lodash.get":"^4.4.2","lodash.set":"^4.3.2","lodash.uniq":"^4.5.0","octokit-pagination-methods":"^1.1.0","once":"^1.4.0","universal-user-agent":"^4.0.0"},"deprecated":false,"description":"GitHub REST API client for Node.js","devDependencies":{"@gimenete/type-writer":"^0.1.3","@octokit/auth":"^1.1.1","@octokit/fixtures-server":"^5.0.6","@octokit/graphql":"^4.2.0","@types/node":"^13.1.0","bundlesize":"^0.18.0","chai":"^4.1.2","compression-webpack-plugin":"^3.1.0","cypress":"^4.0.0","glob":"^7.1.2","http-proxy-agent":"^4.0.0","lodash.camelcase":"^4.3.0","lodash.merge":"^4.6.1","lodash.upperfirst":"^4.3.1","lolex":"^6.0.0","mkdirp":"^1.0.0","mocha":"^7.0.1","mustache":"^4.0.0","nock":"^11.3.3","npm-run-all":"^4.1.2","nyc":"^15.0.0","prettier":"^1.14.2","proxy":"^1.0.0","semantic-release":"^17.0.0","sinon":"^8.0.0","sinon-chai":"^3.0.0","sort-keys":"^4.0.0","string-to-arraybuffer":"^1.0.0","string-to-jsdoc-comment":"^1.0.0","typescript":"^3.3.1","webpack":"^4.0.0","webpack-bundle-analyzer":"^3.0.0","webpack-cli":"^3.0.0"},"files":["index.js","index.d.ts","lib","plugins"],"homepage":"https://github.com/octokit/rest.js#readme","keywords":["octokit","github","rest","api-client"],"license":"MIT","name":"@octokit/rest","nyc":{"ignore":["test"]},"publishConfig":{"access":"public"},"release":{"publish":["@semantic-release/npm",{"path":"@semantic-release/github","assets":["dist/*","!dist/*.map.gz"]}]},"repository":{"type":"git","url":"git+https://github.com/octokit/rest.js.git"},"scripts":{"build":"npm-run-all build:*","build:browser":"npm-run-all build:browser:*","build:browser:development":"webpack --mode development --entry . --output-library=Octokit --output=./dist/octokit-rest.js --profile --json > dist/bundle-stats.json","build:browser:production":"webpack --mode production --entry . --plugin=compression-webpack-plugin --output-library=Octokit --output-path=./dist --output-filename=octokit-rest.min.js --devtool source-map","build:ts":"npm run -s update-endpoints:typescript","coverage":"nyc report --reporter=html && open coverage/index.html","generate-bundle-report":"webpack-bundle-analyzer dist/bundle-stats.json --mode=static --no-open --report dist/bundle-report.html","lint":"prettier --check '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","lint:fix":"prettier --write '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","postvalidate:ts":"tsc --noEmit --target es6 test/typescript-validate.ts","prebuild:browser":"mkdirp dist/","pretest":"npm run -s lint","prevalidate:ts":"npm run -s build:ts","start-fixtures-server":"octokit-fixtures-server","test":"nyc mocha test/mocha-node-setup.js \"test/*/**/*-test.js\"","test:browser":"cypress run --browser chrome","update-endpoints":"npm-run-all update-endpoints:*","update-endpoints:fetch-json":"node scripts/update-endpoints/fetch-json","update-endpoints:typescript":"node scripts/update-endpoints/typescript","validate:ts":"tsc --target es6 --noImplicitAny index.d.ts"},"types":"index.d.ts","version":"16.43.2"};
+module.exports = {"_args":[["@octokit/rest@16.43.2","/mnt/c/Source/Personal/self-hosted-runner-grouper"]],"_from":"@octokit/rest@16.43.2","_id":"@octokit/rest@16.43.2","_inBundle":false,"_integrity":"sha512-ngDBevLbBTFfrHZeiS7SAMAZ6ssuVmXuya+F/7RaVvlysgGa1JKJkKWY+jV6TCJYcW0OALfJ7nTIGXcBXzycfQ==","_location":"/@octokit/rest","_phantomChildren":{"deprecation":"2.3.1","once":"1.4.0","os-name":"3.1.0"},"_requested":{"type":"version","registry":true,"raw":"@octokit/rest@16.43.2","name":"@octokit/rest","escapedName":"@octokit%2frest","scope":"@octokit","rawSpec":"16.43.2","saveSpec":null,"fetchSpec":"16.43.2"},"_requiredBy":["/@actions/github"],"_resolved":"https://registry.npmjs.org/@octokit/rest/-/rest-16.43.2.tgz","_spec":"16.43.2","_where":"/mnt/c/Source/Personal/self-hosted-runner-grouper","author":{"name":"Gregor Martynus","url":"https://github.com/gr2m"},"bugs":{"url":"https://github.com/octokit/rest.js/issues"},"bundlesize":[{"path":"./dist/octokit-rest.min.js.gz","maxSize":"33 kB"}],"contributors":[{"name":"Mike de Boer","email":"info@mikedeboer.nl"},{"name":"Fabian Jakobs","email":"fabian@c9.io"},{"name":"Joe Gallo","email":"joe@brassafrax.com"},{"name":"Gregor Martynus","url":"https://github.com/gr2m"}],"dependencies":{"@octokit/auth-token":"^2.4.0","@octokit/plugin-paginate-rest":"^1.1.1","@octokit/plugin-request-log":"^1.0.0","@octokit/plugin-rest-endpoint-methods":"2.4.0","@octokit/request":"^5.2.0","@octokit/request-error":"^1.0.2","atob-lite":"^2.0.0","before-after-hook":"^2.0.0","btoa-lite":"^1.0.0","deprecation":"^2.0.0","lodash.get":"^4.4.2","lodash.set":"^4.3.2","lodash.uniq":"^4.5.0","octokit-pagination-methods":"^1.1.0","once":"^1.4.0","universal-user-agent":"^4.0.0"},"description":"GitHub REST API client for Node.js","devDependencies":{"@gimenete/type-writer":"^0.1.3","@octokit/auth":"^1.1.1","@octokit/fixtures-server":"^5.0.6","@octokit/graphql":"^4.2.0","@types/node":"^13.1.0","bundlesize":"^0.18.0","chai":"^4.1.2","compression-webpack-plugin":"^3.1.0","cypress":"^4.0.0","glob":"^7.1.2","http-proxy-agent":"^4.0.0","lodash.camelcase":"^4.3.0","lodash.merge":"^4.6.1","lodash.upperfirst":"^4.3.1","lolex":"^6.0.0","mkdirp":"^1.0.0","mocha":"^7.0.1","mustache":"^4.0.0","nock":"^11.3.3","npm-run-all":"^4.1.2","nyc":"^15.0.0","prettier":"^1.14.2","proxy":"^1.0.0","semantic-release":"^17.0.0","sinon":"^8.0.0","sinon-chai":"^3.0.0","sort-keys":"^4.0.0","string-to-arraybuffer":"^1.0.0","string-to-jsdoc-comment":"^1.0.0","typescript":"^3.3.1","webpack":"^4.0.0","webpack-bundle-analyzer":"^3.0.0","webpack-cli":"^3.0.0"},"files":["index.js","index.d.ts","lib","plugins"],"homepage":"https://github.com/octokit/rest.js#readme","keywords":["octokit","github","rest","api-client"],"license":"MIT","name":"@octokit/rest","nyc":{"ignore":["test"]},"publishConfig":{"access":"public"},"release":{"publish":["@semantic-release/npm",{"path":"@semantic-release/github","assets":["dist/*","!dist/*.map.gz"]}]},"repository":{"type":"git","url":"git+https://github.com/octokit/rest.js.git"},"scripts":{"build":"npm-run-all build:*","build:browser":"npm-run-all build:browser:*","build:browser:development":"webpack --mode development --entry . --output-library=Octokit --output=./dist/octokit-rest.js --profile --json > dist/bundle-stats.json","build:browser:production":"webpack --mode production --entry . --plugin=compression-webpack-plugin --output-library=Octokit --output-path=./dist --output-filename=octokit-rest.min.js --devtool source-map","build:ts":"npm run -s update-endpoints:typescript","coverage":"nyc report --reporter=html && open coverage/index.html","generate-bundle-report":"webpack-bundle-analyzer dist/bundle-stats.json --mode=static --no-open --report dist/bundle-report.html","lint":"prettier --check '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","lint:fix":"prettier --write '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","postvalidate:ts":"tsc --noEmit --target es6 test/typescript-validate.ts","prebuild:browser":"mkdirp dist/","pretest":"npm run -s lint","prevalidate:ts":"npm run -s build:ts","start-fixtures-server":"octokit-fixtures-server","test":"nyc mocha test/mocha-node-setup.js \"test/*/**/*-test.js\"","test:browser":"cypress run --browser chrome","update-endpoints":"npm-run-all update-endpoints:*","update-endpoints:fetch-json":"node scripts/update-endpoints/fetch-json","update-endpoints:typescript":"node scripts/update-endpoints/typescript","validate:ts":"tsc --target es6 --noImplicitAny index.d.ts"},"types":"index.d.ts","version":"16.43.2"};
 
 /***/ }),
 
