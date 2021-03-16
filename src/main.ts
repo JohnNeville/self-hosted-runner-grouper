@@ -196,9 +196,11 @@ async function fetchContent(
   core.debug(`Trying to load file locally`);
   try {
     if (fs.existsSync(repoPath)) {
-      const fileContents = Buffer.from(repoPath, 'utf8').toString();
-      core.debug(`File loaded`);
-      return fileContents
+      fs.readFile(repoPath, 'utf8', function(err, data) {
+        if (err) throw err;
+        core.debug(`File loaded`);
+        return data
+      });
     }
   } catch(err) {
     core.debug(`Unable to find file locally ${err}`);

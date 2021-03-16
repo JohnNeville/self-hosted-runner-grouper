@@ -14801,9 +14801,12 @@ function fetchContent(client, repoPath) {
         core.debug(`Trying to load file locally`);
         try {
             if (fs_1.default.existsSync(repoPath)) {
-                const fileContents = Buffer.from(repoPath, 'utf8').toString();
-                core.debug(`File loaded`);
-                return fileContents;
+                fs_1.default.readFile(repoPath, 'utf8', function (err, data) {
+                    if (err)
+                        throw err;
+                    core.debug(`File loaded`);
+                    return data;
+                });
             }
         }
         catch (err) {
