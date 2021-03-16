@@ -29,6 +29,10 @@ inputs:
     description: 'Simulate non-GET API calls rather than actually performing the action'
     default: 'false'
     required: false
+  debug-requests:
+    description: 'Log requests as info level in Github Actions for debugging'
+    default: 'false'
+    required: false
 branding:
   icon: refresh-ccw
   color: green
